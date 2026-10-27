@@ -133,7 +133,7 @@ function DashboardPage() {
           {/* Countdowns */}
           <div className="flex items-center gap-3">
             {daysToWedding !== null && (
-              <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-xl p-3 text-center min-w-[100px]">
+              <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-xl p-3 text-center min-w-25">
                 <div className="text-2xl sm:text-3xl font-black">{daysToWedding}</div>
                 <div className="text-[11px] font-medium text-rose-100 uppercase tracking-wider">
                   Hari Menuju Resepsi
@@ -141,7 +141,7 @@ function DashboardPage() {
               </div>
             )}
             {daysToEngagement !== null && (
-              <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-xl p-3 text-center min-w-[100px]">
+              <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-xl p-3 text-center min-w-25">
                 <div className="text-2xl sm:text-3xl font-black">{daysToEngagement}</div>
                 <div className="text-[11px] font-medium text-rose-100 uppercase tracking-wider">
                   Hari Menuju Lamaran

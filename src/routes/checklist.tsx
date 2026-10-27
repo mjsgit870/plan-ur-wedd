@@ -255,7 +255,7 @@ function ChecklistPage() {
                           : 'border-gray-300 bg-white hover:border-rose-500'
                       }`}
                     >
-                      {isDone && <Check className="w-4 h-4 stroke-[3]" />}
+                      {isDone && <Check className="w-4 h-4 stroke-3" />}
                     </button>
 
                     <div className="min-w-0">
