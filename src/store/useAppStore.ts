@@ -15,6 +15,8 @@ interface AppState {
   setCurrentWorkspace: (workspace: Workspace | null) => void
   fetchWorkspaces: () => Promise<void>
   createWorkspace: (data: Partial<Workspace>) => Promise<Workspace | null>
+  updateWorkspace: (id: string, data: Partial<Workspace>) => Promise<Workspace | null>
+  deleteWorkspace: (id: string) => Promise<boolean>
   initializeAuth: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -140,6 +142,74 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       console.error('Error:', err)
       return null
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  updateWorkspace: async (id, workspaceData) => {
+    if (!isSupabaseConfigured) return null
+    try {
+      set({ loading: true })
+      const { data, error } = await supabase
+        .from('workspaces')
+        .update({
+          bride_name: workspaceData.bride_name,
+          groom_name: workspaceData.groom_name,
+          engagement_date: workspaceData.engagement_date || null,
+          wedding_date: workspaceData.wedding_date || null,
+          total_budget_target: workspaceData.total_budget_target || 0,
+          savings_target: workspaceData.savings_target || 0,
+        })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      const updated = data as Workspace
+      const updatedList = get().workspaces.map((w) => (w.id === id ? updated : w))
+      const current = get().currentWorkspace
+
+      set({
+        workspaces: updatedList,
+        currentWorkspace: current?.id === id ? updated : current,
+      })
+
+      return updated
+    } catch (err) {
+      console.error('Error updating workspace:', err)
+      return null
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  deleteWorkspace: async (id) => {
+    if (!isSupabaseConfigured) return false
+    try {
+      set({ loading: true })
+      const { error } = await supabase.from('workspaces').delete().eq('id', id)
+      if (error) throw error
+
+      const remaining = get().workspaces.filter((w) => w.id !== id)
+      const nextActive = remaining.length > 0 ? remaining[0] : null
+
+      set({
+        workspaces: remaining,
+        currentWorkspace: nextActive,
+      })
+
+      if (nextActive) {
+        localStorage.setItem('active_workspace_id', nextActive.id)
+      } else {
+        localStorage.removeItem('active_workspace_id')
+      }
+
+      return true
+    } catch (err) {
+      console.error('Error deleting workspace:', err)
+      return false
     } finally {
       set({ loading: false })
     }

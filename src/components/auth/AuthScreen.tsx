@@ -5,7 +5,38 @@ import { Heart, UserPlus, LogIn } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { authSchema, type AuthFormValues } from '../../lib/schemas'
+import {
+  loginSchema,
+  registerSchema,
+  type LoginFormValues,
+  type RegisterFormValues,
+} from '../../lib/schemas'
+
+function getAuthErrorMessage(message?: string): string {
+  if (!message) return 'Terjadi kesalahan saat otentikasi.'
+
+  const lower = message.toLowerCase()
+  if (lower.includes('invalid login credentials')) {
+    return 'Email atau kata sandi salah. Silakan periksa kembali.'
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'Email belum dikonfirmasi. Silakan cek kotak masuk email Anda.'
+  }
+  if (lower.includes('user already registered') || lower.includes('already registered')) {
+    return 'Email sudah terdaftar. Silakan masuk menggunakan akun tersebut.'
+  }
+  if (lower.includes('password should be at least')) {
+    return 'Kata sandi minimal 6 karakter.'
+  }
+  if (lower.includes('too many requests') || lower.includes('rate limit')) {
+    return 'Terlalu banyak percobaan. Harap tunggu beberapa saat lagi.'
+  }
+  if (lower.includes('network') || lower.includes('fetch')) {
+    return 'Gagal terhubung ke server. Periksa koneksi internet Anda.'
+  }
+
+  return message
+}
 
 export function AuthScreen() {
   const [isRegister, setIsRegister] = React.useState(false)
@@ -13,42 +44,122 @@ export function AuthScreen() {
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
   const [infoMsg, setInfoMsg] = React.useState<string | null>(null)
 
+  // Login Form
   const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<AuthFormValues>({
-    resolver: zodResolver(authSchema),
+    register: registerLogin,
+    handleSubmit: handleLoginSubmit,
+    reset: resetLogin,
+    formState: { errors: loginErrors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
     defaultValues: {
+      identifier: '',
+      password: '',
+    },
+  })
+
+  // Register Form
+  const {
+    register: registerRegister,
+    handleSubmit: handleRegisterSubmit,
+    reset: resetRegister,
+    formState: { errors: registerErrors },
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      username: '',
       email: '',
       password: '',
     },
   })
 
-  const onSubmit = async (values: AuthFormValues) => {
+  const onLogin = async (values: LoginFormValues) => {
     setErrorMsg(null)
     setInfoMsg(null)
     setLoading(true)
 
     try {
-      if (isRegister) {
-        const { error } = await supabase.auth.signUp({
-          email: values.email,
-          password: values.password,
-        })
-        if (error) throw error
-        setInfoMsg('Pendaftaran berhasil! Silakan cek email Anda untuk konfirmasi akun.')
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: values.email,
-          password: values.password,
-        })
-        if (error) throw error
+      const input = values.identifier.trim()
+      let loginEmail = input
+
+      // If identifier does not contain @, resolve username to email via profiles table
+      if (!input.includes('@')) {
+        const { data: profile, error: profileErr } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('username', input.toLowerCase())
+          .maybeSingle()
+
+        if (profileErr || !profile?.email) {
+          setErrorMsg('Username tidak ditemukan. Periksa kembali atau gunakan email.')
+          setLoading(false)
+          return
+        }
+        loginEmail = profile.email
       }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: values.password,
+      })
+      if (error) throw error
     } catch (err: unknown) {
       const error = err as { message?: string }
-      setErrorMsg(error.message || 'Terjadi kesalahan saat otentikasi.')
+      setErrorMsg(getAuthErrorMessage(error.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const onRegister = async (values: RegisterFormValues) => {
+    setErrorMsg(null)
+    setInfoMsg(null)
+    setLoading(true)
+
+    try {
+      const username = values.username.trim().toLowerCase()
+      const email = values.email.trim().toLowerCase()
+
+      // Check if username already taken in profiles
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle()
+
+      if (existingUser) {
+        setErrorMsg('Username sudah digunakan. Silakan pilih username lain.')
+        setLoading(false)
+        return
+      }
+
+      const { data: signUpData, error } = await supabase.auth.signUp({
+        email,
+        password: values.password,
+        options: {
+          data: {
+            username,
+          },
+        },
+      })
+      if (error) throw error
+
+      // Fallback insert to profiles table
+      if (signUpData.user) {
+        await supabase.from('profiles').upsert({
+          id: signUpData.user.id,
+          username,
+          email,
+        })
+      }
+
+      setInfoMsg('Pendaftaran berhasil! Silakan masuk menggunakan username atau email Anda.')
+      setIsRegister(false)
+      resetRegister()
+      resetLogin({ identifier: username, password: '' })
+    } catch (err: unknown) {
+      const error = err as { message?: string }
+      setErrorMsg(getAuthErrorMessage(error.message))
     } finally {
       setLoading(false)
     }
@@ -81,35 +192,61 @@ export function AuthScreen() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            placeholder="nama@email.com"
-            {...register('email')}
-            error={errors.email?.message}
-          />
+        {isRegister ? (
+          /* Register Form */
+          <form onSubmit={handleRegisterSubmit(onRegister)} noValidate className="space-y-4">
+            <Input
+              label="Username"
+              type="text"
+              placeholder="contoh: farhan_wedding"
+              {...registerRegister('username')}
+              error={registerErrors.username?.message}
+            />
 
-          <Input
-            label="Kata Sandi"
-            type="password"
-            placeholder="Minimal 6 karakter"
-            {...register('password')}
-            error={errors.password?.message}
-          />
+            <Input
+              label="Email"
+              type="email"
+              placeholder="nama@email.com"
+              {...registerRegister('email')}
+              error={registerErrors.email?.message}
+            />
 
-          <Button type="submit" className="w-full gap-2" loading={loading}>
-            {isRegister ? (
-              <>
-                <UserPlus className="w-4 h-4" /> Daftar Akun Baru
-              </>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4" /> Masuk ke Akun
-              </>
-            )}
-          </Button>
-        </form>
+            <Input
+              label="Kata Sandi"
+              type="password"
+              placeholder="Minimal 6 karakter"
+              {...registerRegister('password')}
+              error={registerErrors.password?.message}
+            />
+
+            <Button type="submit" className="w-full gap-2" loading={loading}>
+              <UserPlus className="w-4 h-4" /> Daftar Akun Baru
+            </Button>
+          </form>
+        ) : (
+          /* Login Form */
+          <form onSubmit={handleLoginSubmit(onLogin)} noValidate className="space-y-4">
+            <Input
+              label="Username atau Email"
+              type="text"
+              placeholder="farhan_wedding atau nama@email.com"
+              {...registerLogin('identifier')}
+              error={loginErrors.identifier?.message}
+            />
+
+            <Input
+              label="Kata Sandi"
+              type="password"
+              placeholder="Minimal 6 karakter"
+              {...registerLogin('password')}
+              error={loginErrors.password?.message}
+            />
+
+            <Button type="submit" className="w-full gap-2" loading={loading}>
+              <LogIn className="w-4 h-4" /> Masuk ke Akun
+            </Button>
+          </form>
+        )}
 
         <div className="mt-6 pt-6 border-t border-gray-100 text-center">
           <button
@@ -118,7 +255,8 @@ export function AuthScreen() {
               setIsRegister(!isRegister)
               setErrorMsg(null)
               setInfoMsg(null)
-              reset()
+              resetLogin()
+              resetRegister()
             }}
             className="text-xs font-semibold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
           >

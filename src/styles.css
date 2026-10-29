@@ -31,7 +31,16 @@ body {
   }
 }
 
-@keyframes backdropFade {
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes backdropFadeIn {
   from {
     opacity: 0;
   }
@@ -40,10 +49,19 @@ body {
   }
 }
 
-@keyframes modalDesktop {
+@keyframes backdropFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalDesktopIn {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(6px);
+    transform: scale(0.95) translateY(8px);
   }
   to {
     opacity: 1;
@@ -51,7 +69,18 @@ body {
   }
 }
 
-@keyframes modalMobile {
+@keyframes modalDesktopOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+}
+
+@keyframes modalMobileIn {
   from {
     opacity: 0;
     transform: translateY(100%);
@@ -62,21 +91,43 @@ body {
   }
 }
 
+@keyframes modalMobileOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
 .animate-fade-in {
-  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-backdrop {
-  animation: backdropFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-backdrop-in {
+  animation: backdropFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-modal {
-  animation: modalMobile 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-backdrop-out {
+  animation: backdropFadeOut 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-modal-in {
+  animation: modalMobileIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-modal-out {
+  animation: modalMobileOut 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @media (min-width: 640px) {
-  .animate-modal {
-    animation: modalDesktop 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  .animate-modal-in {
+    animation: modalDesktopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-modal-out {
+    animation: modalDesktopOut 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 }
 

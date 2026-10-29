@@ -25,7 +25,7 @@ export function Checkbox({
   return (
     <div
       className={cn(
-        'inline-flex items-start gap-2.5 cursor-pointer select-none',
+        'inline-flex items-center gap-2.5 cursor-pointer select-none',
         disabled && 'opacity-50 pointer-events-none',
         className
       )}
@@ -43,7 +43,7 @@ export function Checkbox({
           }
         }}
         className={cn(
-          'w-4.5 h-4.5 mt-0.5 rounded-md border flex items-center justify-center transition-all duration-150 active:scale-90 focus:outline-none focus:ring-2 focus:ring-rose-500/20',
+          'w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-all duration-150 active:scale-90 focus:outline-none focus:ring-2 focus:ring-rose-500/20 aspect-square',
           checked
             ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
             : 'border-gray-300 bg-white hover:border-rose-400'

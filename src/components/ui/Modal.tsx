@@ -20,28 +20,24 @@ export function Modal({
   children,
   maxWidth = 'md',
 }: ModalProps) {
-  const [mounted, setMounted] = React.useState(false)
-  const [visible, setVisible] = React.useState(false)
+  const [mounted, setMounted] = React.useState(isOpen)
+  const [isClosing, setIsClosing] = React.useState(false)
 
-  // Handle open/close transitions
+  // Handle open/close mounting
   React.useEffect(() => {
     let timer: number
     if (isOpen) {
+      setIsClosing(false)
       setMounted(true)
-      // Trigger enter transition in next frame
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setVisible(true)
-        })
-      })
-    } else {
-      setVisible(false)
+    } else if (mounted) {
+      setIsClosing(true)
       timer = window.setTimeout(() => {
         setMounted(false)
-      }, 200) // matches transition duration
+        setIsClosing(false)
+      }, 190) // matches exit animation duration
     }
     return () => clearTimeout(timer)
-  }, [isOpen])
+  }, [isOpen, mounted])
 
   // Handle ESC key and scroll lock
   React.useEffect(() => {
@@ -51,11 +47,12 @@ export function Modal({
       if (e.key === 'Escape') onClose()
     }
 
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = 'unset'
+      document.body.style.overflow = previousOverflow || 'unset'
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [mounted, onClose])
@@ -70,17 +67,12 @@ export function Modal({
   }
 
   const modalContent = (
-    <div
-      className={cn(
-        'fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ease-out',
-        visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-      )}
-    >
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       {/* Backdrop */}
       <div
         className={cn(
-          'fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200 ease-out',
-          visible ? 'opacity-100' : 'opacity-0'
+          'fixed inset-0 bg-black/60 backdrop-blur-xs',
+          isClosing ? 'animate-backdrop-out' : 'animate-backdrop-in'
         )}
         aria-hidden="true"
         onClick={onClose}
@@ -91,11 +83,9 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative w-full bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col z-10 transition-all duration-200 ease-out',
+          'relative w-full bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col z-10 will-change-transform',
           widths[maxWidth],
-          visible
-            ? 'translate-y-0 scale-100 opacity-100'
-            : 'translate-y-8 sm:translate-y-2 sm:scale-95 opacity-0'
+          isClosing ? 'animate-modal-out' : 'animate-modal-in'
         )}
       >
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
@@ -106,6 +96,7 @@ export function Modal({
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
             title="Tutup"

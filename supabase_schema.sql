@@ -8,6 +8,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. TABLES
 
+-- Profiles (Supports Username login)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- Workspaces
 CREATE TABLE IF NOT EXISTS public.workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,6 +178,21 @@ CREATE POLICY "Members can remove members in their workspace"
 ON public.workspace_members FOR DELETE 
 USING (public.has_workspace_access(workspace_id));
 
+-- Profiles Policies (Login lookup)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public profiles are readable for login lookup" ON public.profiles;
+CREATE POLICY "Public profiles are readable for login lookup"
+ON public.profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile"
+ON public.profiles FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile"
+ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
 -- Operational Tables Policies
 DROP POLICY IF EXISTS "Full access for workspace members on budget_items" ON public.budget_items;
 CREATE POLICY "Full access for workspace members on budget_items"
@@ -204,6 +227,30 @@ WITH CHECK (public.has_workspace_access(workspace_id));
 -- ============================================================================
 -- 5. TRIGGERS
 -- ============================================================================
+
+-- Trigger 0: Auto create profile on auth signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    INSERT INTO public.profiles (id, username, email)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+        NEW.email
+    )
+    ON CONFLICT (id) DO UPDATE 
+    SET username = EXCLUDED.username, email = EXCLUDED.email;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Trigger 1: Auto add creator as workspace member owner
 CREATE OR REPLACE FUNCTION public.handle_new_workspace()

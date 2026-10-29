@@ -1,6 +1,21 @@
 import { z } from 'zod'
 
-export const authSchema = z.object({
+export const loginSchema = z.object({
+  identifier: z
+    .string()
+    .min(3, 'Username atau Email minimal 3 karakter'),
+  password: z
+    .string()
+    .min(1, 'Kata sandi wajib diisi')
+    .min(6, 'Kata sandi minimal 6 karakter'),
+})
+export type LoginFormValues = z.infer<typeof loginSchema>
+
+export const registerSchema = z.object({
+  username: z
+    .string()
+    .min(3, 'Username minimal 3 karakter')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Username hanya boleh huruf, angka, dan underscore'),
   email: z
     .string()
     .min(1, 'Email wajib diisi')
@@ -10,11 +25,12 @@ export const authSchema = z.object({
     .min(1, 'Kata sandi wajib diisi')
     .min(6, 'Kata sandi minimal 6 karakter'),
 })
-export type AuthFormValues = z.infer<typeof authSchema>
+export type RegisterFormValues = z.infer<typeof registerSchema>
 
 export const workspaceSchema = z.object({
   groom_name: z.string().min(1, 'Nama Calon Pengantin Pria (CPP) wajib diisi'),
   bride_name: z.string().min(1, 'Nama Calon Pengantin Wanita (CPW) wajib diisi'),
+  engagement_date: z.string().optional().nullable(),
   wedding_date: z.string().optional().nullable(),
   total_budget_target: z.coerce.number().min(0).default(0),
   savings_target: z.coerce.number().min(0).default(0),
