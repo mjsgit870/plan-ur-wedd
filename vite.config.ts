@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const config = defineConfig({
+  base: process.env.BASE_PATH || '/',
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),

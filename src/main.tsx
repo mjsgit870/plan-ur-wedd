@@ -6,6 +6,7 @@ const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   scrollRestoration: true,
+  basepath: import.meta.env.BASE_URL,
 })
 
 declare module '@tanstack/react-router' {
