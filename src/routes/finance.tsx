@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Wallet, TrendingDown, ArrowUpRight, ArrowDownRight, Layers, Receipt } from 'lucide-react'
@@ -11,12 +13,19 @@ import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
+import { CurrencyInput } from '../components/ui/CurrencyInput'
 import { Select } from '../components/ui/Select'
 import { DatePicker } from '../components/ui/DatePicker'
 import { Checkbox } from '../components/ui/Checkbox'
 import { toast } from '../components/ui/Toast'
 import { CardSkeleton, TableRowSkeleton } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
+import {
+  budgetItemSchema,
+  transactionSchema,
+  type BudgetItemFormValues,
+  type TransactionFormValues,
+} from '../lib/schemas'
 
 export const Route = createFileRoute('/finance')({ component: FinancePage })
 
@@ -31,20 +40,45 @@ function FinancePage() {
   const [isBudgetModalOpen, setIsBudgetModalOpen] = React.useState(false)
   const [isTxModalOpen, setIsTxModalOpen] = React.useState(false)
 
-  // Budget form
-  const [budgetPhase, setBudgetPhase] = React.useState<BudgetPhase>('wedding')
-  const [categoryName, setCategoryName] = React.useState('')
-  const [estimatedAmount, setEstimatedAmount] = React.useState('')
-  const [budgetNotes, setBudgetNotes] = React.useState('')
+  // React Hook Form for Budget
+  const {
+    register: registerBudget,
+    handleSubmit: handleBudgetSubmit,
+    control: budgetControl,
+    reset: resetBudget,
+    formState: { errors: budgetErrors },
+  } = useForm<BudgetItemFormValues>({
+    resolver: zodResolver(budgetItemSchema),
+    defaultValues: {
+      phase: 'wedding',
+      category_name: '',
+      estimated_amount: 0,
+      notes: '',
+    },
+  })
 
-  // Transaction form
-  const [txType, setTxType] = React.useState<TransactionType>('expense')
-  const [txTitle, setTxTitle] = React.useState('')
-  const [txAmount, setTxAmount] = React.useState('')
-  const [txBudgetId, setTxBudgetId] = React.useState('')
-  const [txPaidBy, setTxPaidBy] = React.useState<PaidBy>('joint')
-  const [txIsPaid, setTxIsPaid] = React.useState(true)
-  const [txDate, setTxDate] = React.useState(new Date().toISOString().split('T')[0])
+  // React Hook Form for Transaction
+  const {
+    register: registerTx,
+    handleSubmit: handleTxSubmit,
+    control: txControl,
+    reset: resetTx,
+    watch: watchTx,
+    formState: { errors: txErrors },
+  } = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      type: 'expense',
+      title: '',
+      amount: 0,
+      budget_item_id: '',
+      paid_by: 'joint',
+      is_paid: true,
+      transaction_date: new Date().toISOString().split('T')[0],
+    },
+  })
+
+  const currentTxType = watchTx('type')
 
   // Queries
   const { data: budgetItems = [], isLoading: loadingBudget } = useQuery({
@@ -77,22 +111,20 @@ function FinancePage() {
 
   // Mutations
   const addBudgetMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: BudgetItemFormValues) => {
       const { error } = await supabase.from('budget_items').insert({
         workspace_id: currentWorkspace!.id,
-        phase: budgetPhase,
-        category_name: categoryName,
-        estimated_amount: Number(estimatedAmount) || 0,
-        notes: budgetNotes || null,
+        phase: values.phase,
+        category_name: values.category_name,
+        estimated_amount: Number(values.estimated_amount) || 0,
+        notes: values.notes || null,
       })
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget_items'] })
       setIsBudgetModalOpen(false)
-      setCategoryName('')
-      setEstimatedAmount('')
-      setBudgetNotes('')
+      resetBudget()
       toast.success('Pos Anggaran Disimpan', 'Pos biaya baru berhasil ditambahkan ke anggaran.')
     },
     onError: (err: Error) => {
@@ -101,16 +133,16 @@ function FinancePage() {
   })
 
   const addTxMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: TransactionFormValues) => {
       const { error } = await supabase.from('transactions').insert({
         workspace_id: currentWorkspace!.id,
-        type: txType,
-        title: txTitle,
-        amount: Number(txAmount) || 0,
-        budget_item_id: txBudgetId ? txBudgetId : null,
-        paid_by: txPaidBy,
-        is_paid: txIsPaid,
-        transaction_date: txDate,
+        type: values.type,
+        title: values.title,
+        amount: Number(values.amount) || 0,
+        budget_item_id: values.budget_item_id || null,
+        paid_by: values.paid_by,
+        is_paid: values.is_paid,
+        transaction_date: values.transaction_date,
       })
       if (error) throw error
     },
@@ -118,9 +150,7 @@ function FinancePage() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['budget_items'] })
       setIsTxModalOpen(false)
-      setTxTitle('')
-      setTxAmount('')
-      setTxBudgetId('')
+      resetTx()
       toast.success('Transaksi Dicatat', 'Arus kas dan realisasi budget otomatis diperbarui.')
     },
     onError: (err: Error) => {
@@ -420,51 +450,69 @@ function FinancePage() {
       {/* Modal Add Budget */}
       <Modal
         isOpen={isBudgetModalOpen}
-        onClose={() => setIsBudgetModalOpen(false)}
+        onClose={() => {
+          setIsBudgetModalOpen(false)
+          resetBudget()
+        }}
         title="Tambah Pos Anggaran"
       >
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addBudgetMutation.mutate()
-          }}
+          noValidate
+          onSubmit={handleBudgetSubmit((data) => addBudgetMutation.mutate(data))}
           className="space-y-4"
         >
-          <Select
-            label="Tahap Acara"
-            value={budgetPhase}
-            onChange={(e) => setBudgetPhase(e.target.value as BudgetPhase)}
-            options={[
-              { label: 'Lamaran (Engagement)', value: 'engagement' },
-              { label: 'Akad & Resepsi (Wedding)', value: 'wedding' },
-              { label: 'Administrasi & KUA', value: 'administration' },
-              { label: 'Seserahan & Hantaran', value: 'seserahan' },
-            ]}
+          <Controller
+            control={budgetControl}
+            name="phase"
+            render={({ field }) => (
+              <Select
+                label="Tahap Acara"
+                value={field.value}
+                onChange={(e) => field.onChange(e.target.value)}
+                options={[
+                  { label: 'Lamaran (Engagement)', value: 'engagement' },
+                  { label: 'Akad & Resepsi (Wedding)', value: 'wedding' },
+                  { label: 'Administrasi & KUA', value: 'administration' },
+                  { label: 'Seserahan & Hantaran', value: 'seserahan' },
+                ]}
+              />
+            )}
           />
           <Input
             label="Nama Kategori Pos"
             placeholder="Contoh: Venue & Katering, Busana Pengantin"
-            value={categoryName}
-            onChange={(e) => setCategoryName(e.target.value)}
-            required
+            {...registerBudget('category_name')}
+            error={budgetErrors.category_name?.message}
           />
-          <Input
-            label="Estimasi Biaya (Rp)"
-            type="number"
-            placeholder="0"
-            value={estimatedAmount}
-            onChange={(e) => setEstimatedAmount(e.target.value)}
-            required
+          <Controller
+            control={budgetControl}
+            name="estimated_amount"
+            render={({ field }) => (
+              <CurrencyInput
+                label="Estimasi Biaya (Rp)"
+                placeholder="0"
+                value={field.value}
+                onChange={field.onChange}
+                error={budgetErrors.estimated_amount?.message}
+              />
+            )}
           />
           <Input
             label="Catatan Tambahan (Opsional)"
             placeholder="Contoh: Termasuk 500 porsi prasmanan"
-            value={budgetNotes}
-            onChange={(e) => setBudgetNotes(e.target.value)}
+            {...registerBudget('notes')}
+            error={budgetErrors.notes?.message}
           />
 
           <div className="pt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsBudgetModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsBudgetModalOpen(false)
+                resetBudget()
+              }}
+            >
               Batal
             </Button>
             <Button type="submit" loading={addBudgetMutation.isPending}>
@@ -477,85 +525,127 @@ function FinancePage() {
       {/* Modal Add Transaction */}
       <Modal
         isOpen={isTxModalOpen}
-        onClose={() => setIsTxModalOpen(false)}
+        onClose={() => {
+          setIsTxModalOpen(false)
+          resetTx()
+        }}
         title="Catat Transaksi Kas"
       >
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addTxMutation.mutate()
-          }}
+          noValidate
+          onSubmit={handleTxSubmit((data) => addTxMutation.mutate(data))}
           className="space-y-4"
         >
-          <Select
-            label="Tipe Transaksi"
-            value={txType}
-            onChange={(e) => setTxType(e.target.value as TransactionType)}
-            options={[
-              { label: 'Pengeluaran (Expense)', value: 'expense' },
-              { label: 'Setoran Tabungan Bersama (Income)', value: 'income_saving' },
-            ]}
+          <Controller
+            control={txControl}
+            name="type"
+            render={({ field }) => (
+              <Select
+                label="Tipe Transaksi"
+                value={field.value}
+                onChange={(e) => field.onChange(e.target.value)}
+                options={[
+                  { label: 'Pengeluaran (Expense)', value: 'expense' },
+                  { label: 'Setoran Tabungan Bersama (Income)', value: 'income_saving' },
+                ]}
+              />
+            )}
           />
           <Input
             label="Keterangan Transaksi"
             placeholder="Contoh: Pembayaran DP Gedung, Beli Cincin"
-            value={txTitle}
-            onChange={(e) => setTxTitle(e.target.value)}
-            required
+            {...registerTx('title')}
+            error={txErrors.title?.message}
           />
-          <Input
-            label="Nominal (Rp)"
-            type="number"
-            placeholder="0"
-            value={txAmount}
-            onChange={(e) => setTxAmount(e.target.value)}
-            required
+          <Controller
+            control={txControl}
+            name="amount"
+            render={({ field }) => (
+              <CurrencyInput
+                label="Nominal (Rp)"
+                placeholder="0"
+                value={field.value}
+                onChange={field.onChange}
+                error={txErrors.amount?.message}
+              />
+            )}
           />
 
-          {txType === 'expense' && (
-            <Select
-              label="Alokasi Pos Budget"
-              value={txBudgetId}
-              onChange={(e) => setTxBudgetId(e.target.value)}
-            >
-              <option value="">-- Tanpa Pos Terkait --</option>
-              {budgetItems.map((b) => (
-                <option key={b.id} value={b.id}>
-                  [{b.phase.toUpperCase()}] {b.category_name}
-                </option>
-              ))}
-            </Select>
+          {currentTxType === 'expense' && (
+            <Controller
+              control={txControl}
+              name="budget_item_id"
+              render={({ field }) => (
+                <Select
+                  label="Alokasi Pos Budget"
+                  value={field.value || ''}
+                  onChange={(e) => field.onChange(e.target.value)}
+                >
+                  <option value="">-- Tanpa Pos Terkait --</option>
+                  {budgetItems.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      [{b.phase.toUpperCase()}] {b.category_name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Dibayar Oleh"
-              value={txPaidBy}
-              onChange={(e) => setTxPaidBy(e.target.value as PaidBy)}
-              options={[
-                { label: 'Bersama (Joint)', value: 'joint' },
-                { label: 'CPP (Groom)', value: 'groom' },
-                { label: 'CPW (Bride)', value: 'bride' },
-                { label: 'Orang Tua (Parents)', value: 'parents' },
-              ]}
+            <Controller
+              control={txControl}
+              name="paid_by"
+              render={({ field }) => (
+                <Select
+                  label="Dibayar Oleh"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  options={[
+                    { label: 'Bersama (Joint)', value: 'joint' },
+                    { label: 'CPP (Groom)', value: 'groom' },
+                    { label: 'CPW (Bride)', value: 'bride' },
+                    { label: 'Orang Tua (Parents)', value: 'parents' },
+                  ]}
+                />
+              )}
             />
-            <DatePicker
-              label="Tanggal Transaksi"
-              value={txDate}
-              onChange={(date) => setTxDate(date)}
+            <Controller
+              control={txControl}
+              name="transaction_date"
+              render={({ field }) => (
+                <DatePicker
+                  label="Tanggal Transaksi"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
             />
           </div>
 
           <div className="pt-1">
-            <Checkbox
-              checked={txIsPaid}
-              onChange={(checked) => setTxIsPaid(checked)}
-              label="Transaksi Sudah Lunas / Terealisasi"
+            <Controller
+              control={txControl}
+              name="is_paid"
+              render={({ field }) => (
+                <Checkbox
+                  checked={field.value}
+                  onChange={field.onChange}
+                  label="Transaksi Sudah Lunas / Terealisasi"
+                />
+              )}
             />
           </div>
 
           <div className="pt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsTxModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsTxModalOpen(false)
+                resetTx()
+              }}
+            >
               Batal
             </Button>
             <Button type="submit" loading={addTxMutation.isPending}>

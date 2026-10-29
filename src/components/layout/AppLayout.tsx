@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useRouterState } from '@tanstack/react-router'
 import {
   LayoutDashboard,
@@ -15,9 +17,11 @@ import { useAppStore } from '../../store/useAppStore'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
+import { CurrencyInput } from '../ui/CurrencyInput'
 import { Select } from '../ui/Select'
 import { DatePicker } from '../ui/DatePicker'
 import { isSupabaseConfigured } from '../../lib/supabase'
+import { workspaceSchema, type WorkspaceFormValues } from '../../lib/schemas'
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouterState()
@@ -33,12 +37,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   } = useAppStore()
 
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false)
-  const [brideName, setBrideName] = React.useState('')
-  const [groomName, setGroomName] = React.useState('')
-  const [weddingDate, setWeddingDate] = React.useState('')
-  const [totalBudgetTarget, setTotalBudgetTarget] = React.useState('')
-  const [savingsTarget, setSavingsTarget] = React.useState('')
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+
+  const {
+    register: registerWorkspace,
+    handleSubmit: handleWorkspaceSubmit,
+    control: workspaceControl,
+    reset: resetWorkspace,
+    formState: { errors: workspaceErrors },
+  } = useForm<WorkspaceFormValues>({
+    resolver: zodResolver(workspaceSchema),
+    defaultValues: {
+      groom_name: '',
+      bride_name: '',
+      wedding_date: '',
+      total_budget_target: 0,
+      savings_target: 0,
+    },
+  })
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -48,24 +64,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { label: 'Tamu', path: '/guests', icon: Users },
   ]
 
-  const handleCreateWorkspace = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!brideName || !groomName) return
+  const onCreateWorkspace = async (data: WorkspaceFormValues) => {
     setIsSubmitting(true)
     try {
       await createWorkspace({
-        bride_name: brideName,
-        groom_name: groomName,
-        wedding_date: weddingDate || null,
-        total_budget_target: Number(totalBudgetTarget) || 0,
-        savings_target: Number(savingsTarget) || 0,
+        bride_name: data.bride_name,
+        groom_name: data.groom_name,
+        wedding_date: data.wedding_date || null,
+        total_budget_target: Number(data.total_budget_target) || 0,
+        savings_target: Number(data.savings_target) || 0,
       })
       setIsCreateModalOpen(false)
-      setBrideName('')
-      setGroomName('')
-      setWeddingDate('')
-      setTotalBudgetTarget('')
-      setSavingsTarget('')
+      resetWorkspace()
     } finally {
       setIsSubmitting(false)
     }
@@ -75,13 +85,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased">
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
-              <Heart className="w-5 h-5 fill-current" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+          {/* Brand Logo & Name */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
+              <Heart className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
             </div>
             <div>
-              <span className="font-bold text-gray-900 tracking-tight text-lg">
+              <span className="font-bold text-gray-900 tracking-tight text-base sm:text-lg">
                 Rencanakan
               </span>
               <span className="hidden sm:inline-block ml-2 text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
@@ -91,9 +102,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Workspace Switcher & User Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             {workspaces.length > 0 ? (
-              <div className="w-40 sm:w-56">
+              <div className="w-28 xs:w-36 sm:w-56 min-w-0">
                 <Select
                   value={currentWorkspace?.id || ''}
                   onChange={(e) => {
@@ -124,7 +135,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 onClick={signOut}
                 title="Keluar"
-                className="text-gray-500 hover:text-red-600"
+                className="text-gray-500 hover:text-red-600 shrink-0 h-8 w-8 sm:h-9 sm:w-9 p-0 flex items-center justify-center"
               >
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -135,7 +146,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Supabase Config Warning (if credentials not filled) */}
       {!isSupabaseConfigured && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 flex items-center justify-center gap-2">
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 flex items-center justify-center gap-2 text-center">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>
             Supabase belum terkonfigurasi. Silakan isi <code>.env</code> dengan{' '}
@@ -219,50 +230,72 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Modal Buat Workspace */}
       <Modal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false)
+          resetWorkspace()
+        }}
         title="Buat Proyek Pernikahan Baru"
         description="Ruang kerja kolaboratif untuk pasangan CPP & CPW."
       >
-        <form onSubmit={handleCreateWorkspace} className="space-y-4">
+        <form onSubmit={handleWorkspaceSubmit(onCreateWorkspace)} noValidate className="space-y-4">
           <Input
             label="Nama Calon Pengantin Pria (CPP)"
             placeholder="Contoh: Farhan"
-            value={groomName}
-            onChange={(e) => setGroomName(e.target.value)}
-            required
+            {...registerWorkspace('groom_name')}
+            error={workspaceErrors.groom_name?.message}
           />
           <Input
             label="Nama Calon Pengantin Wanita (CPW)"
             placeholder="Contoh: Sarah"
-            value={brideName}
-            onChange={(e) => setBrideName(e.target.value)}
-            required
+            {...registerWorkspace('bride_name')}
+            error={workspaceErrors.bride_name?.message}
           />
-          <DatePicker
-            label="Tanggal Akad / Resepsi"
-            value={weddingDate}
-            onChange={(date) => setWeddingDate(date)}
+          <Controller
+            control={workspaceControl}
+            name="wedding_date"
+            render={({ field }) => (
+              <DatePicker
+                label="Tanggal Akad / Resepsi"
+                value={field.value || ''}
+                onChange={field.onChange}
+              />
+            )}
           />
-          <Input
-            label="Target Total Budget (Rp)"
-            type="number"
-            placeholder="Contoh: 150000000"
-            value={totalBudgetTarget}
-            onChange={(e) => setTotalBudgetTarget(e.target.value)}
+          <Controller
+            control={workspaceControl}
+            name="total_budget_target"
+            render={({ field }) => (
+              <CurrencyInput
+                label="Target Total Budget (Rp)"
+                placeholder="0"
+                value={field.value}
+                onChange={field.onChange}
+                error={workspaceErrors.total_budget_target?.message}
+              />
+            )}
           />
-          <Input
-            label="Target Tabungan Bersama (Rp)"
-            type="number"
-            placeholder="Contoh: 150000000"
-            value={savingsTarget}
-            onChange={(e) => setSavingsTarget(e.target.value)}
+          <Controller
+            control={workspaceControl}
+            name="savings_target"
+            render={({ field }) => (
+              <CurrencyInput
+                label="Target Tabungan Bersama (Rp)"
+                placeholder="0"
+                value={field.value}
+                onChange={field.onChange}
+                error={workspaceErrors.savings_target?.message}
+              />
+            )}
           />
 
           <div className="pt-2 flex items-center justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsCreateModalOpen(false)}
+              onClick={() => {
+                setIsCreateModalOpen(false)
+                resetWorkspace()
+              }}
             >
               Batal
             </Button>

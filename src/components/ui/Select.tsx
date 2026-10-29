@@ -69,11 +69,13 @@ export function Select({
     const spaceBelow = window.innerHeight - rect.bottom
     const menuEstimatedHeight = 220
     const placeAbove = spaceBelow < menuEstimatedHeight && rect.top > menuEstimatedHeight
+    const menuWidth = Math.max(rect.width, 190)
+    const leftPos = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8))
 
     setCoords({
       top: placeAbove ? rect.top - 6 : rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
+      left: leftPos,
+      width: menuWidth,
       placeAbove,
     })
   }, [])
@@ -196,7 +198,7 @@ export function Select({
           }
         }}
         className={cn(
-          'w-full flex items-center justify-between px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg shadow-xs transition-all duration-150 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500',
+          'w-full flex items-center justify-between px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm bg-white border border-gray-300 rounded-lg shadow-xs transition-all duration-150 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500',
           isOpen && 'border-rose-500 ring-2 ring-rose-500/20',
           error && 'border-red-500 focus:ring-red-500',
           disabled && 'opacity-50 cursor-not-allowed bg-gray-50'
@@ -212,7 +214,7 @@ export function Select({
         </span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2',
+            'w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-1.5 sm:ml-2',
             isOpen && 'rotate-180 text-rose-600'
           )}
         />

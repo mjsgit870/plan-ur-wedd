@@ -1,35 +1,48 @@
 import * as React from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Heart, UserPlus, LogIn } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { authSchema, type AuthFormValues } from '../../lib/schemas'
 
 export function AuthScreen() {
   const [isRegister, setIsRegister] = React.useState(false)
-  const [email, setEmail] = React.useState('')
-  const [password, setPassword] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
   const [infoMsg, setInfoMsg] = React.useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<AuthFormValues>({
+    resolver: zodResolver(authSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  })
+
+  const onSubmit = async (values: AuthFormValues) => {
     setErrorMsg(null)
     setInfoMsg(null)
+    setLoading(true)
 
     try {
       if (isRegister) {
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: values.email,
+          password: values.password,
         })
         if (error) throw error
         setInfoMsg('Pendaftaran berhasil! Silakan cek email Anda untuk konfirmasi akun.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+          email: values.email,
+          password: values.password,
         })
         if (error) throw error
       }
@@ -68,23 +81,21 @@ export function AuthScreen() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           <Input
             label="Email"
             type="email"
             placeholder="nama@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            {...register('email')}
+            error={errors.email?.message}
           />
 
           <Input
             label="Kata Sandi"
             type="password"
             placeholder="Minimal 6 karakter"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            {...register('password')}
+            error={errors.password?.message}
           />
 
           <Button type="submit" className="w-full gap-2" loading={loading}>
@@ -107,12 +118,13 @@ export function AuthScreen() {
               setIsRegister(!isRegister)
               setErrorMsg(null)
               setInfoMsg(null)
+              reset()
             }}
             className="text-xs font-semibold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
           >
             {isRegister
               ? 'Sudah punya akun? Masuk di sini'
-              : 'Belum punya akun? Buat akun sekarang'}
+              : 'Belum punya akun? Daftar gratis'}
           </button>
         </div>
       </div>

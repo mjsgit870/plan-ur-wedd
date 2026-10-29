@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Phone, CreditCard, Store } from 'lucide-react'
@@ -11,12 +13,19 @@ import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
+import { CurrencyInput } from '../components/ui/CurrencyInput'
 import { Select } from '../components/ui/Select'
 import { DatePicker } from '../components/ui/DatePicker'
 import { Checkbox } from '../components/ui/Checkbox'
 import { toast } from '../components/ui/Toast'
 import { CardSkeleton } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
+import {
+  vendorSchema,
+  terminSchema,
+  type VendorFormValues,
+  type TerminFormValues,
+} from '../lib/schemas'
 
 export const Route = createFileRoute('/vendors')({ component: VendorsPage })
 
@@ -28,21 +37,43 @@ function VendorsPage() {
   const [isAddVendorModalOpen, setIsAddVendorModalOpen] = React.useState(false)
   const [selectedVendorForPayment, setSelectedVendorForPayment] = React.useState<Vendor | null>(null)
 
-  // Add Vendor Form
-  const [vendorName, setVendorName] = React.useState('')
-  const [category, setCategory] = React.useState('')
-  const [contactPerson, setContactPerson] = React.useState('')
-  const [phone, setPhone] = React.useState('')
-  const [status, setStatus] = React.useState<VendorStatus>('research')
-  const [contractValue, setContractValue] = React.useState('')
-  const [selectedBudgetId, setSelectedBudgetId] = React.useState('')
-  const [notes, setNotes] = React.useState('')
+  // React Hook Form for Vendor
+  const {
+    register: registerVendor,
+    handleSubmit: handleVendorSubmit,
+    control: vendorControl,
+    reset: resetVendor,
+    formState: { errors: vendorErrors },
+  } = useForm<VendorFormValues>({
+    resolver: zodResolver(vendorSchema),
+    defaultValues: {
+      vendor_name: '',
+      category: '',
+      contact_person: '',
+      phone: '',
+      status: 'research',
+      total_contract_value: 0,
+      budget_item_id: '',
+      notes: '',
+    },
+  })
 
-  // Add Payment / Termin Form
-  const [terminTitle, setTerminTitle] = React.useState('')
-  const [terminAmount, setTerminAmount] = React.useState('')
-  const [terminDueDate, setTerminDueDate] = React.useState('')
-  const [terminIsPaid, setTerminIsPaid] = React.useState(true)
+  // React Hook Form for Termin
+  const {
+    register: registerTermin,
+    handleSubmit: handleTerminSubmit,
+    control: terminControl,
+    reset: resetTermin,
+    formState: { errors: terminErrors },
+  } = useForm<TerminFormValues>({
+    resolver: zodResolver(terminSchema),
+    defaultValues: {
+      title: '',
+      amount: 0,
+      due_date: '',
+      is_paid: true,
+    },
+  })
 
   // Fetch Vendors
   const { data: vendors = [], isLoading: loadingVendors } = useQuery({
@@ -90,30 +121,24 @@ function VendorsPage() {
 
   // Mutations
   const addVendorMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: VendorFormValues) => {
       const { error } = await supabase.from('vendors').insert({
         workspace_id: currentWorkspace!.id,
-        vendor_name: vendorName,
-        category: category || null,
-        contact_person: contactPerson || null,
-        phone: phone || null,
-        status,
-        total_contract_value: Number(contractValue) || 0,
-        budget_item_id: selectedBudgetId || null,
-        notes: notes || null,
+        vendor_name: values.vendor_name,
+        category: values.category || null,
+        contact_person: values.contact_person || null,
+        phone: values.phone || null,
+        status: values.status,
+        total_contract_value: Number(values.total_contract_value) || 0,
+        budget_item_id: values.budget_item_id || null,
+        notes: values.notes || null,
       })
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] })
       setIsAddVendorModalOpen(false)
-      setVendorName('')
-      setCategory('')
-      setContactPerson('')
-      setPhone('')
-      setContractValue('')
-      setSelectedBudgetId('')
-      setNotes('')
+      resetVendor()
       toast.success('Vendor Berhasil Ditambahkan', 'Data vendor masuk ke pipeline pemilihan.')
     },
     onError: (err: Error) => {
@@ -122,18 +147,20 @@ function VendorsPage() {
   })
 
   const addTerminMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: TerminFormValues) => {
       if (!selectedVendorForPayment) return
       const { error } = await supabase.from('transactions').insert({
         workspace_id: currentWorkspace!.id,
         vendor_id: selectedVendorForPayment.id,
         budget_item_id: selectedVendorForPayment.budget_item_id,
         type: 'expense',
-        title: `[${selectedVendorForPayment.vendor_name}] ${terminTitle}`,
-        amount: Number(terminAmount) || 0,
-        due_date: terminDueDate || null,
-        transaction_date: terminIsPaid ? new Date().toISOString().split('T')[0] : (terminDueDate || new Date().toISOString().split('T')[0]),
-        is_paid: terminIsPaid,
+        title: `[${selectedVendorForPayment.vendor_name}] ${values.title}`,
+        amount: Number(values.amount) || 0,
+        due_date: values.due_date || null,
+        transaction_date: values.is_paid
+          ? new Date().toISOString().split('T')[0]
+          : values.due_date || new Date().toISOString().split('T')[0],
+        is_paid: values.is_paid,
         paid_by: 'joint',
       })
       if (error) throw error
@@ -143,9 +170,7 @@ function VendorsPage() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['budget_items'] })
       refetchVendorTx()
-      setTerminTitle('')
-      setTerminAmount('')
-      setTerminDueDate('')
+      resetTermin()
       toast.success('Termin Pembayaran Disimpan', 'Total terbayar vendor dan transaksi otomatis diperbarui.')
     },
     onError: (err: Error) => {
@@ -345,89 +370,110 @@ function VendorsPage() {
       {/* Modal Add Vendor */}
       <Modal
         isOpen={isAddVendorModalOpen}
-        onClose={() => setIsAddVendorModalOpen(false)}
+        onClose={() => {
+          setIsAddVendorModalOpen(false)
+          resetVendor()
+        }}
         title="Tambah Vendor Baru"
       >
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addVendorMutation.mutate()
-          }}
+          noValidate
+          onSubmit={handleVendorSubmit((data) => addVendorMutation.mutate(data))}
           className="space-y-4"
         >
           <Input
             label="Nama Vendor"
             placeholder="Contoh: Sanggar Kirana, Catering Buana"
-            value={vendorName}
-            onChange={(e) => setVendorName(e.target.value)}
-            required
+            {...registerVendor('vendor_name')}
+            error={vendorErrors.vendor_name?.message}
           />
           <Input
             label="Kategori Layanan"
             placeholder="Contoh: Katering, Fotografi, MUA, Dekorasi"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            {...registerVendor('category')}
+            error={vendorErrors.category?.message}
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Contact Person (PIC)"
               placeholder="Contoh: Mbak Rina"
-              value={contactPerson}
-              onChange={(e) => setContactPerson(e.target.value)}
+              {...registerVendor('contact_person')}
+              error={vendorErrors.contact_person?.message}
             />
             <Input
               label="Nomor WhatsApp"
               placeholder="Contoh: 08123456789"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              {...registerVendor('phone')}
+              error={vendorErrors.phone?.message}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Status Pipeline"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as VendorStatus)}
-              options={[
-                { label: 'Riset', value: 'research' },
-                { label: 'Survey / Test Food', value: 'survey' },
-                { label: 'Booked (DP)', value: 'booked' },
-                { label: 'Lunas', value: 'paid_off' },
-              ]}
+            <Controller
+              control={vendorControl}
+              name="status"
+              render={({ field }) => (
+                <Select
+                  label="Status Pipeline"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  options={[
+                    { label: 'Riset', value: 'research' },
+                    { label: 'Survey / Test Food', value: 'survey' },
+                    { label: 'Booked (DP)', value: 'booked' },
+                    { label: 'Lunas', value: 'paid_off' },
+                  ]}
+                />
+              )}
             />
-            <Input
-              label="Nilai Kontrak (Rp)"
-              type="number"
-              placeholder="0"
-              value={contractValue}
-              onChange={(e) => setContractValue(e.target.value)}
+            <Controller
+              control={vendorControl}
+              name="total_contract_value"
+              render={({ field }) => (
+                <CurrencyInput
+                  label="Nilai Kontrak (Rp)"
+                  placeholder="0"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={vendorErrors.total_contract_value?.message}
+                />
+              )}
             />
           </div>
 
-          <Select
-            label="Alokasi Pos Budget"
-            value={selectedBudgetId}
-            onChange={(e) => setSelectedBudgetId(e.target.value)}
-          >
-            <option value="">-- Hubungkan ke Pos Budget --</option>
-            {budgetItems.map((b) => (
-              <option key={b.id} value={b.id}>
-                [{b.phase.toUpperCase()}] {b.category_name}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={vendorControl}
+            name="budget_item_id"
+            render={({ field }) => (
+              <Select
+                label="Alokasi Pos Budget"
+                value={field.value || ''}
+                onChange={(e) => field.onChange(e.target.value)}
+              >
+                <option value="">-- Hubungkan ke Pos Budget --</option>
+                {budgetItems.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    [{b.phase.toUpperCase()}] {b.category_name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          />
 
           <Input
             label="Catatan Kontrak / Fasilitas"
             placeholder="Contoh: Include bonus 2 round table & photo booth"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            {...registerVendor('notes')}
+            error={vendorErrors.notes?.message}
           />
 
           <div className="pt-2 flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsAddVendorModalOpen(false)}
+              onClick={() => {
+                setIsAddVendorModalOpen(false)
+                resetVendor()
+              }}
             >
               Batal
             </Button>
@@ -485,7 +531,11 @@ function VendorsPage() {
             </div>
 
             {/* Add Termin Form */}
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
+            <form
+              noValidate
+              onSubmit={handleTerminSubmit((data) => addTerminMutation.mutate(data))}
+              className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3"
+            >
               <h4 className="text-xs font-semibold text-gray-900">
                 Tambah Termin / Pembayaran Baru
               </h4>
@@ -493,43 +543,60 @@ function VendorsPage() {
                 <Input
                   label="Judul Termin"
                   placeholder="Contoh: DP 30%, Pelunasan H-7"
-                  value={terminTitle}
-                  onChange={(e) => setTerminTitle(e.target.value)}
+                  {...registerTermin('title')}
+                  error={terminErrors.title?.message}
                 />
-                <Input
-                  label="Nominal (Rp)"
-                  type="number"
-                  placeholder="0"
-                  value={terminAmount}
-                  onChange={(e) => setTerminAmount(e.target.value)}
+                <Controller
+                  control={terminControl}
+                  name="amount"
+                  render={({ field }) => (
+                    <CurrencyInput
+                      label="Nominal (Rp)"
+                      placeholder="0"
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={terminErrors.amount?.message}
+                    />
+                  )}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3 items-end">
-                <DatePicker
-                  label="Tanggal / Jatuh Tempo"
-                  value={terminDueDate}
-                  onChange={(date) => setTerminDueDate(date)}
+                <Controller
+                  control={terminControl}
+                  name="due_date"
+                  render={({ field }) => (
+                    <DatePicker
+                      label="Tanggal / Jatuh Tempo"
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
                 <div className="pb-2">
-                  <Checkbox
-                    checked={terminIsPaid}
-                    onChange={(checked) => setTerminIsPaid(checked)}
-                    label="Sudah Dibayar (Lunas)"
+                  <Controller
+                    control={terminControl}
+                    name="is_paid"
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={field.value}
+                        onChange={field.onChange}
+                        label="Sudah Dibayar (Lunas)"
+                      />
+                    )}
                   />
                 </div>
               </div>
 
               <div className="pt-2 flex justify-end">
                 <Button
+                  type="submit"
                   size="sm"
-                  onClick={() => addTerminMutation.mutate()}
                   loading={addTerminMutation.isPending}
-                  disabled={!terminTitle || !terminAmount}
                 >
                   Simpan Termin
                 </Button>
               </div>
-            </div>
+            </form>
           </div>
         </Modal>
       )}

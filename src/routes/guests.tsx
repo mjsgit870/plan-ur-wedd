@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Download, Upload, Trash2, Phone, Search, Users } from 'lucide-react'
@@ -15,6 +17,7 @@ import { Select } from '../components/ui/Select'
 import { toast } from '../components/ui/Toast'
 import { TableRowSkeleton } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
+import { guestSchema, type GuestFormValues } from '../lib/schemas'
 
 export const Route = createFileRoute('/guests')({ component: GuestsPage })
 
@@ -27,14 +30,25 @@ function GuestsPage() {
   const [rsvpFilter, setRsvpFilter] = React.useState<string>('all')
   const [isAddModalOpen, setIsAddModalOpen] = React.useState(false)
 
-  // Form State
-  const [name, setName] = React.useState('')
-  const [side, setSide] = React.useState<GuestSide>('groom')
-  const [groupCategory, setGroupCategory] = React.useState('Keluarga')
-  const [phone, setPhone] = React.useState('')
-  const [invitationType, setInvitationType] = React.useState<InvitationType>('digital')
-  const [paxCount, setPaxCount] = React.useState('2')
-  const [rsvpStatus, setRsvpStatus] = React.useState<RsvpStatus>('pending')
+  // React Hook Form for Guest
+  const {
+    register: registerGuest,
+    handleSubmit: handleGuestSubmit,
+    control: guestControl,
+    reset: resetGuest,
+    formState: { errors: guestErrors },
+  } = useForm<GuestFormValues>({
+    resolver: zodResolver(guestSchema),
+    defaultValues: {
+      name: '',
+      side: 'groom',
+      group_category: 'Keluarga Inti',
+      phone: '',
+      invitation_type: 'digital',
+      pax_count: 2,
+      rsvp_status: 'pending',
+    },
+  })
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -55,25 +69,23 @@ function GuestsPage() {
 
   // Mutations
   const addGuestMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: GuestFormValues) => {
       const { error } = await supabase.from('guests').insert({
         workspace_id: currentWorkspace!.id,
-        name,
-        side,
-        group_category: groupCategory,
-        phone: phone || null,
-        invitation_type: invitationType,
-        pax_count: Number(paxCount) || 2,
-        rsvp_status: rsvpStatus,
+        name: values.name,
+        side: values.side,
+        group_category: values.group_category,
+        phone: values.phone || null,
+        invitation_type: values.invitation_type,
+        pax_count: Number(values.pax_count) || 2,
+        rsvp_status: values.rsvp_status,
       })
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] })
       setIsAddModalOpen(false)
-      setName('')
-      setPhone('')
-      setPaxCount('2')
+      resetGuest()
       toast.success('Tamu Berhasil Ditambahkan')
     },
     onError: (err: Error) => {
@@ -410,47 +422,59 @@ function GuestsPage() {
       {/* Modal Add Guest */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false)
+          resetGuest()
+        }}
         title="Tambah Tamu Undangan"
       >
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addGuestMutation.mutate()
-          }}
+          noValidate
+          onSubmit={handleGuestSubmit((data) => addGuestMutation.mutate(data))}
           className="space-y-4"
         >
           <Input
             label="Nama Tamu / Keluarga"
             placeholder="Contoh: Bpk. Bambang & Keluarga"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
+            {...registerGuest('name')}
+            error={guestErrors.name?.message}
           />
           <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Pihak Pengundang"
-              value={side}
-              onChange={(e) => setSide(e.target.value as GuestSide)}
-              options={[
-                { label: 'CPP (Pria)', value: 'groom' },
-                { label: 'CPW (Wanita)', value: 'bride' },
-                { label: 'Orang Tua CPP', value: 'groom_parents' },
-                { label: 'Orang Tua CPW', value: 'bride_parents' },
-              ]}
+            <Controller
+              control={guestControl}
+              name="side"
+              render={({ field }) => (
+                <Select
+                  label="Pihak Pengundang"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value as GuestSide)}
+                  options={[
+                    { label: 'CPP (Pria)', value: 'groom' },
+                    { label: 'CPW (Wanita)', value: 'bride' },
+                    { label: 'Orang Tua CPP', value: 'groom_parents' },
+                    { label: 'Orang Tua CPW', value: 'bride_parents' },
+                  ]}
+                />
+              )}
             />
-            <Select
-              label="Kategori Grup"
-              value={groupCategory}
-              onChange={(e) => setGroupCategory(e.target.value)}
-              options={[
-                { label: 'Keluarga Inti', value: 'Keluarga Inti' },
-                { label: 'Keluarga Besar', value: 'Keluarga Besar' },
-                { label: 'VIP', value: 'VIP' },
-                { label: 'Teman Kantor', value: 'Teman Kantor' },
-                { label: 'Teman Kuliah / Sekolah', value: 'Teman Kuliah' },
-                { label: 'Tetangga', value: 'Tetangga' },
-              ]}
+            <Controller
+              control={guestControl}
+              name="group_category"
+              render={({ field }) => (
+                <Select
+                  label="Kategori Grup"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  options={[
+                    { label: 'Keluarga Inti', value: 'Keluarga Inti' },
+                    { label: 'Keluarga Besar', value: 'Keluarga Besar' },
+                    { label: 'VIP', value: 'VIP' },
+                    { label: 'Teman Kantor', value: 'Teman Kantor' },
+                    { label: 'Teman Kuliah / Sekolah', value: 'Teman Kuliah' },
+                    { label: 'Tetangga', value: 'Tetangga' },
+                  ]}
+                />
+              )}
             />
           </div>
 
@@ -458,43 +482,61 @@ function GuestsPage() {
             <Input
               label="Nomor WhatsApp"
               placeholder="08123456789"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              {...registerGuest('phone')}
+              error={guestErrors.phone?.message}
             />
             <Input
               label="Jumlah Pax (Orang)"
               type="number"
-              value={paxCount}
-              onChange={(e) => setPaxCount(e.target.value)}
-              required
+              {...registerGuest('pax_count')}
+              error={guestErrors.pax_count?.message}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Tipe Undangan"
-              value={invitationType}
-              onChange={(e) => setInvitationType(e.target.value as InvitationType)}
-              options={[
-                { label: 'Digital Web / WA', value: 'digital' },
-                { label: 'Fisik (Cetak)', value: 'physical' },
-                { label: 'Keduanya', value: 'both' },
-              ]}
+            <Controller
+              control={guestControl}
+              name="invitation_type"
+              render={({ field }) => (
+                <Select
+                  label="Tipe Undangan"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value as InvitationType)}
+                  options={[
+                    { label: 'Digital Web / WA', value: 'digital' },
+                    { label: 'Fisik (Cetak)', value: 'physical' },
+                    { label: 'Keduanya', value: 'both' },
+                  ]}
+                />
+              )}
             />
-            <Select
-              label="Status RSVP"
-              value={rsvpStatus}
-              onChange={(e) => setRsvpStatus(e.target.value as RsvpStatus)}
-              options={[
-                { label: 'Menunggu', value: 'pending' },
-                { label: 'Hadir', value: 'attending' },
-                { label: 'Tidak Hadir', value: 'declined' },
-              ]}
+            <Controller
+              control={guestControl}
+              name="rsvp_status"
+              render={({ field }) => (
+                <Select
+                  label="Status RSVP"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value as RsvpStatus)}
+                  options={[
+                    { label: 'Menunggu', value: 'pending' },
+                    { label: 'Hadir', value: 'attending' },
+                    { label: 'Tidak Hadir', value: 'declined' },
+                  ]}
+                />
+              )}
             />
           </div>
 
           <div className="pt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsAddModalOpen(false)
+                resetGuest()
+              }}
+            >
               Batal
             </Button>
             <Button type="submit" loading={addGuestMutation.isPending}>

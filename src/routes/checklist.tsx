@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, ExternalLink, Calendar, Sparkles, Check, CheckSquare } from 'lucide-react'
@@ -11,11 +13,13 @@ import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
+import { CurrencyInput } from '../components/ui/CurrencyInput'
 import { Select } from '../components/ui/Select'
 import { DatePicker } from '../components/ui/DatePicker'
 import { toast } from '../components/ui/Toast'
 import { CardSkeleton } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
+import { checklistItemSchema, type ChecklistItemFormValues } from '../lib/schemas'
 
 export const Route = createFileRoute('/checklist')({ component: ChecklistPage })
 
@@ -26,15 +30,28 @@ function ChecklistPage() {
   const [activeTab, setActiveTab] = React.useState<ChecklistType>('administration')
   const [isAddModalOpen, setIsAddModalOpen] = React.useState(false)
 
-  // Form State
-  const [title, setTitle] = React.useState('')
-  const [type, setType] = React.useState<ChecklistType>('administration')
-  const [price, setPrice] = React.useState('')
-  const [dueDate, setDueDate] = React.useState('')
-  const [urlLink, setUrlLink] = React.useState('')
-  const [imageUrl, setImageUrl] = React.useState('')
-  const [selectedBudgetId, setSelectedBudgetId] = React.useState('')
-  const [notes, setNotes] = React.useState('')
+  // React Hook Form with Zod
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<ChecklistItemFormValues>({
+    resolver: zodResolver(checklistItemSchema),
+    defaultValues: {
+      title: '',
+      type: 'administration',
+      price: 0,
+      due_date: '',
+      url_link: '',
+      budget_item_id: '',
+      notes: '',
+    },
+  })
+
+  const formType = watch('type')
 
   // Queries
   const { data: items = [], isLoading } = useQuery({
@@ -64,19 +81,32 @@ function ChecklistPage() {
     },
   })
 
+  const openAddModal = (tabType: ChecklistType) => {
+    reset({
+      type: tabType,
+      title: '',
+      price: 0,
+      due_date: '',
+      url_link: '',
+      budget_item_id: '',
+      notes: '',
+    })
+    setIsAddModalOpen(true)
+  }
+
   // Mutations
   const addItemMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: ChecklistItemFormValues) => {
       const { error } = await supabase.from('checklist_items').insert({
         workspace_id: currentWorkspace!.id,
-        type,
-        title,
-        price: Number(price) || 0,
-        due_date: dueDate || null,
-        url_link: urlLink || null,
-        image_url: imageUrl || null,
-        budget_item_id: selectedBudgetId || null,
-        notes: notes || null,
+        type: values.type,
+        title: values.title,
+        price: Number(values.price) || 0,
+        due_date: values.due_date || null,
+        url_link: values.url_link || null,
+        image_url: null,
+        budget_item_id: values.budget_item_id || null,
+        notes: values.notes || null,
         status: 'pending',
       })
       if (error) throw error
@@ -84,12 +114,7 @@ function ChecklistPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklist_items'] })
       setIsAddModalOpen(false)
-      setTitle('')
-      setPrice('')
-      setDueDate('')
-      setUrlLink('')
-      setImageUrl('')
-      setNotes('')
+      reset()
       toast.success('Item Berhasil Ditambahkan')
     },
     onError: (err: Error) => {
@@ -180,10 +205,7 @@ function ChecklistPage() {
           )}
           <Button
             size="sm"
-            onClick={() => {
-              setType(activeTab)
-              setIsAddModalOpen(true)
-            }}
+            onClick={() => openAddModal(activeTab)}
           >
             <Plus className="w-4 h-4 mr-1" /> Tambah Item
           </Button>
@@ -315,85 +337,107 @@ function ChecklistPage() {
               : 'Daftar hal penting yang harus disiapkan menjelang hari pernikahan.'
           }
           actionLabel="Tambah Item Baru"
-          onAction={() => {
-            setType(activeTab)
-            setIsAddModalOpen(true)
-          }}
+          onAction={() => openAddModal(activeTab)}
         />
       )}
 
       {/* Modal Add Item */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false)
+          reset()
+        }}
         title={`Tambah ${
-          type === 'administration'
+          formType === 'administration'
             ? 'Berkas Administrasi'
-            : type === 'seserahan'
+            : formType === 'seserahan'
             ? 'Barang Seserahan'
             : 'To-do Checklist'
         }`}
       >
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addItemMutation.mutate()
-          }}
+          noValidate
+          onSubmit={handleSubmit((data) => addItemMutation.mutate(data))}
           className="space-y-4"
         >
           <Input
             label="Nama / Judul Item"
             placeholder="Contoh: Baju Lamaran, Surat N1, Sepatu Heels"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
+            {...register('title')}
+            error={errors.title?.message}
           />
           <div className="grid grid-cols-2 gap-3 items-end">
-            <Input
-              label="Biaya / Harga (Rp)"
-              type="number"
-              placeholder="0"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+            <Controller
+              control={control}
+              name="price"
+              render={({ field }) => (
+                <CurrencyInput
+                  label="Biaya / Harga (Rp)"
+                  placeholder="0"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.price?.message}
+                />
+              )}
             />
-            <DatePicker
-              label="Tenggat Waktu (Due Date)"
-              value={dueDate}
-              onChange={(date) => setDueDate(date)}
+            <Controller
+              control={control}
+              name="due_date"
+              render={({ field }) => (
+                <DatePicker
+                  label="Tenggat Waktu (Due Date)"
+                  value={field.value || ''}
+                  onChange={field.onChange}
+                />
+              )}
             />
           </div>
 
-          {type === 'seserahan' && (
+          {formType === 'seserahan' && (
             <Input
               label="Link E-Commerce (Opsional)"
               placeholder="https://shopee.co.id/..."
-              value={urlLink}
-              onChange={(e) => setUrlLink(e.target.value)}
+              {...register('url_link')}
+              error={errors.url_link?.message}
             />
           )}
 
-          <Select
-            label="Alokasi Pos Budget (Otomatis potong saat lunas)"
-            value={selectedBudgetId}
-            onChange={(e) => setSelectedBudgetId(e.target.value)}
-          >
-            <option value="">-- Hubungkan ke Pos Budget --</option>
-            {budgetItems.map((b) => (
-              <option key={b.id} value={b.id}>
-                [{b.phase.toUpperCase()}] {b.category_name}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={control}
+            name="budget_item_id"
+            render={({ field }) => (
+              <Select
+                label="Alokasi Pos Budget (Otomatis potong saat lunas)"
+                value={field.value || ''}
+                onChange={(e) => field.onChange(e.target.value)}
+              >
+                <option value="">-- Hubungkan ke Pos Budget --</option>
+                {budgetItems.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    [{b.phase.toUpperCase()}] {b.category_name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          />
 
           <Input
             label="Catatan Tambahan"
             placeholder="Ukuran, warna, atau persyaratan khusus"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            {...register('notes')}
+            error={errors.notes?.message}
           />
 
           <div className="pt-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsAddModalOpen(false)
+                reset()
+              }}
+            >
               Batal
             </Button>
             <Button type="submit" loading={addItemMutation.isPending}>
